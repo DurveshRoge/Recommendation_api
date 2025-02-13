@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+import os
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import NearestNeighbors
@@ -12,6 +13,12 @@ app = Flask(__name__)
 course_df = pd.read_csv("cleaned_udemy_course_data.csv")
 interaction_df = pd.read_csv("processed_data/train_interactions.csv")
 
+# Ensure required columns exist
+if 'user_id' not in interaction_df.columns or 'course_id' not in interaction_df.columns:
+    raise ValueError("Missing required columns in interaction data.")
+if 'course_id' not in course_df.columns or 'course_title' not in course_df.columns:
+    raise ValueError("Missing required columns in course data.")
+
 # Create user-item interaction matrix
 interaction_matrix = interaction_df.pivot(index='user_id', columns='course_id', values='rating').fillna(0)
 interaction_sparse = csr_matrix(interaction_matrix)
@@ -20,7 +27,7 @@ interaction_sparse = csr_matrix(interaction_matrix)
 model_knn = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=5)
 model_knn.fit(interaction_sparse)
 
-# Train content-based filtering model (Using course_title instead of description)
+# Train content-based filtering model
 if "course_title" in course_df.columns:
     tfidf = TfidfVectorizer(stop_words='english', max_features=2000)
     tfidf_matrix = tfidf.fit_transform(course_df['course_title'].fillna(""))
@@ -65,6 +72,10 @@ def hybrid_recommendation(user_id, num_recommendations=5):
     return [int(course_id) for course_id in final_recommendations]
 
 # API Endpoints
+@app.route('/')
+def home():
+    return jsonify({"message": "Recommendation API is running!"}), 200
+
 @app.route('/recommend/collaborative', methods=['GET'])
 def collaborative_recommend():
     try:
@@ -93,4 +104,5 @@ def hybrid_recommend():
         return jsonify({'error': 'Invalid user_id. Must be an integer.'}), 400
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))  # Render provides a dynamic port
+    app.run(host='0.0.0.0', port=port, debug=True)
